@@ -13,8 +13,7 @@ SECRET_KEY = 'django-insecure-9ymqwno#=fpht%a1kw70o3s@avk4#1r39obcavge-y6b9kkad5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 
@@ -36,6 +35,7 @@ LOCAL_APPS=['apps.user',
 
 #Aplicaciones de terceros "librerias externas"
 THIRD_APPS=[
+    'corsheaders',
     "rest_framework",
     "rest_framework.authtoken",
     "simple_history",
@@ -53,6 +53,7 @@ TOKEN_EXPIRED_AFTER_SECONDS=900
 
      
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -62,6 +63,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'simple_history.middleware.HistoryRequestMiddleware',
 ]
+
 
 ROOT_URLCONF = 'barberia_rest.urls'
 
@@ -114,6 +116,18 @@ USE_I18N = True
 USE_TZ = True
 
 AUTH_USER_MODEL ='user.User'
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:8081',
+    'http://192.168.1.8:8081',
+    'exp://192.168.1.8:8081',
+    'http://192.168.1.3:8081',
+    'exp://192.168.1.3:8081',
+]
+
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/

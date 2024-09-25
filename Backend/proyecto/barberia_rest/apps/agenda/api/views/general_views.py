@@ -17,19 +17,76 @@ from apps.user.authentication_mixins import Authentication
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 
+#Listado de agenda para cliente,turnos reservados por el 
+class UserAgendasViewClie(Authentication,APIView):
+    serializer_class = ListAgendaSerializer
+    authentication_classes =[TokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
-#Listado de agenda para todos los usuarios que no son profesionales
+    def validate_date_format(self,date_str):
+        try:
+            # Intenta convertir la cadena a un objeto datetime
+            datetime.strptime(date_str, "%Y-%m-%d")
+            return True
+        except ValueError:
+            # La cadena no está en el formato correcto
+            return False
+
+    def post(self,request,*args,**kwargs):
+        #obtenemos el token para verificar el usuario
+        token= request.auth
+        print(token)
+        dateGet = request.data.get('date')
+        print(dateGet)
+        user_id =token.user.id
+
+        if user_id is None or token is None:
+            return Response({'error': 'Se produjo un error desconocido'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            usuario = User.objects.get(id = user_id)
+        except User.DoesNotExist:
+            return Response({'error':'Usuario no existe'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if usuario.is_active :
+            # Verifica si la fecha tiene el formato correcto
+            if not self.validate_date_format(dateGet):
+                return Response("Formato de hora erroneo", status=status.HTTP_400_BAD_REQUEST)
+            
+            agendas = ListAgenda.objects.filter(user_clie=user_id, day__gte=dateGet)
+            serializer = ListAgendaSerializer(agendas, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        else:
+            return Response({'error': 'Usuario no disponible o no profesional.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+#Listado de agenda para listar turnos agendados de un profecional (Solo profesionales)
 class UserAgendasView(Authentication,APIView):
     serializer_class = ListAgendaSerializer
+    authentication_classes = [TokenAuthentication]  # Agrega TokenAuthentication
+    permission_classes = [IsAuthenticated]  # Agrega IsAuthenticated
 
+    def validate_date_format(self,date_str):
+        try:
+            # Intenta convertir la cadena a un objeto datetime
+            datetime.strptime(date_str, "%Y-%m-%d")
+            return True
+        except ValueError:
+            # La cadena no está en el formato correcto
+            return False
 
     def post(self, request, *args, **kwargs):
         # Obtén los datos de la solicitud POST enviados desde el frontend
+        token = request.auth
+        dateGet = request.data.get('date')
+        user_id = token.user.id
 
-        user_id = request.data.get('user_id', None)
+        print(dateGet)
 
-        if user_id is None:
-            return Response({'error': 'Se requiere el usuario'}, status=status.HTTP_400_BAD_REQUEST)
+        if user_id is None or dateGet is None:
+            return Response({'error': 'Se produjo un error desconocido'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             usuario = User.objects.get(id=user_id)
@@ -37,17 +94,16 @@ class UserAgendasView(Authentication,APIView):
             return Response({"message": "Usuario no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
         if usuario.is_professional and usuario.is_active:
-            # Variable para traer todos los de la hora actual ocupados
-            date_Actual = timezone.now().date()
-            enabled_days=enabled_days = date.today() + timedelta(days=8)
-
-            agendas = ListAgenda.objects.filter(user_pro=usuario, day__gte=date_Actual,day__lte=enabled_days)
+            # Verifica si la fecha tiene el formato correcto
+            if not self.validate_date_format(dateGet):
+                return Response("Formato de hora erroneo", status=status.HTTP_400_BAD_REQUEST)
             
+            # Filtra las agendas según el usuario y el día
+            agendas = ListAgenda.objects.filter(user_pro=usuario, day=dateGet)
             serializer = ListAgendaSerializer(agendas, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
         else:
             return Response({'error': 'Usuario no disponible o no profesional.'}, status=status.HTTP_400_BAD_REQUEST)
-        
 
 #Se realizo la vista create para que lo usuarios puedan agendar su cita
 class AgendaCreateAPIView(Authentication,CreateAPIView):
@@ -61,7 +117,6 @@ class AgendaCreateAPIView(Authentication,CreateAPIView):
         # Accede al token de autenticación
 
         token = request.auth
-        print(token)
 
         # Accede a los datos de la solicitud POST enviados desde el frontend
         data = request.data.copy() 
@@ -308,7 +363,7 @@ class AgendaDestroyAPIView(DestroyAPIView):
         token = request.auth
         user = token.user
         user_id=user.id
-        # Verificamos que el token del user_clie que va a hacer la reserva coincida con el ususario autenticado en ese momento
+
         if not token:
             return Response({'error': 'Token de autenticación no proporcionado.'}, status=status.HTTP_401_UNAUTHORIZED)
         
@@ -316,7 +371,7 @@ class AgendaDestroyAPIView(DestroyAPIView):
         if user.is_authenticated:
             if user.is_active:
                 # Obtener el primer objeto
-                date_agenda = CreateAgendaSerializer.Meta.model.objects.filter(id=pk, user_pro=user.id, state=True).first()
+                date_agenda = CreateAgendaSerializer.Meta.model.objects.filter(id=pk, state=True).first()
                 if date_agenda:
                     print(date_agenda)
                     if date_agenda.user_clie.id == user_id or user_id == date_agenda.user_pro.id:           

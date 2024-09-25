@@ -1,8 +1,11 @@
 from rest_framework.generics import CreateAPIView, DestroyAPIView
+from apps.agenda.api.serializers.agenda_serializers import CreateAgendaSerializer
 from rest_framework.response import Response
 from rest_framework import status,generics
 from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse
+from apps.agenda.models import ListAgenda
+from django.db.models import Q
 #import proyecto authenticate
 from apps.user.authentication_mixins import Authentication
 from rest_framework.authentication import TokenAuthentication
@@ -34,8 +37,7 @@ class ListDateUserView(Authentication,APIView):
         token = request.auth
         user=token.user
         user_id=user.id
-        response_data = {}
-
+        
         if user_id is None:
             return Response({'error': 'Se requiere el usuario'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -88,23 +90,34 @@ class DateCreateAPIView(Authentication,CreateAPIView):
                 timeseccion = datetime.strptime(request.data.get('timeseccion'), '%H:%M:%S').time()
                 timebreak = datetime.strptime(request.data.get('timebreak'), '%H:%M:%S').time()
                 breakstart = datetime.strptime(request.data.get('breakstart'), '%H:%M:%S').time()
-                is_holidays = request.data.get('is_holidays', False)  # Convertir a booleano
-                print(request.data.get('is_holidays', False))
+                is_holidays = request.data.get('is_holidays', 'false').lower() == 'true'# Convertir a booleano
+                print("Holidays is :----------",is_holidays)
                 # Para los campos de tiempo relacionados con las vacaciones
                 
+                # Si es festivo, asegurarse de que los campos relacionados estén presentes
                 if is_holidays:
+                    startwork_holi = request.data.get('startwork_holi')
+                    finishwork_holi = request.data.get('finishwork_holi')
+                    breakstart_holi = request.data.get('breakstart_holi')
+
+                    # Verificar si faltan datos para el día festivo
+                    if not all([startwork_holi, finishwork_holi, breakstart_holi]):
+                        return Response(
+                            {"error": "Faltan datos para el horario de días festivos. Se requieren 'startwork_holi', 'finishwork_holi' y 'breakstart_holi'."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
                     
-                    startwork_holi = datetime.strptime(request.data.get('startwork_holi'), '%H:%M:%S').time()
-                    finishwork_holi = datetime.strptime(request.data.get('finishwork_holi'), '%H:%M:%S').time()
-                    breakstart_holi = datetime.strptime(request.data.get('breakstart_holi'), '%H:%M:%S').time()
-                    
+                    # Convertir los datos a tipo `time`
+                    startwork_holi = datetime.strptime(startwork_holi, '%H:%M:%S').time()
+                    finishwork_holi = datetime.strptime(finishwork_holi, '%H:%M:%S').time()
+                    breakstart_holi = datetime.strptime(breakstart_holi, '%H:%M:%S').time()
                     # Llamar a la función con is_holidays=True
                     schedule_result = self.generate_schedule(startwork, finishwork, timeseccion, timebreak, breakstart, 
                                                             startwork_holi, finishwork_holi, breakstart_holi, is_holidays=True)
                     
                 else:
 
-                    
+                    print('entro a is holidays False' )
                     # Llamar a la función con is_holidays=False
                     schedule_result = self.generate_schedule(startwork, finishwork, timeseccion, timebreak, breakstart, 
                                                             None, None, None,  is_holidays=False)
@@ -118,7 +131,6 @@ class DateCreateAPIView(Authentication,CreateAPIView):
                     
                     #Desempaquetar los valores de las listas (si están presentes)
                     data = {key: value[0] if isinstance(value, list) else value for key, value in data.items()}
-                    print(type(startwork),type(finishwork),type(timebreak),type(timeseccion),type(breakstart),type(startwork_holi),type(finishwork_holi),type(breakstart_holi),".................")
                     serializer_class = DateUserSerializer(data=data)
                     print(serializer_class)
                     
@@ -144,65 +156,74 @@ class DateCreateAPIView(Authentication,CreateAPIView):
             finish_time = finishwork
             break_start_time = breakstart
             print(start_time, finish_time, break_start_time)   
-            
+
             if is_holidays:
                 print(is_holidays, "holidays")
                 start_time_holi = startwork_holi
                 print(start_time_holi)
-                finish_time_holi =finishwork_holi
+                finish_time_holi = finishwork_holi
                 print(finish_time_holi)
                 break_start_time_holi = breakstart_holi
                 print(break_start_time_holi)
-                
-                # Validar que ambos horarios sean divisibles uniformemente por timeseccion
-                print(timeseccion, "Timeseccion")
-                # Convertir la cadena de tiempo a un objeto timedelta
-                timeseccion_timedelta = datetime.combine(datetime.now().date(), timeseccion) - datetime(1900, 1, 1)
-
+            
+            # Validar que ambos horarios sean divisibles uniformemente por timeseccion
+            print(timeseccion, "Timeseccion")
+            # Convertir la cadena de tiempo a un objeto timedelta
+            timeseccion_timedelta = datetime.combine(datetime.now().date(), timeseccion) - datetime(1900, 1, 1)
 
             # Calcular la duración total en minutos 
             if isinstance(timeseccion_timedelta.total_seconds(), (int, float)) and timeseccion_timedelta.total_seconds() != 0:
                 print(timeseccion_timedelta, "---------------------------")
-               
-                for time_info in [(start_time, finish_time)] if not is_holidays else [(start_time_holi, finish_time_holi)]:
-                    diferencia_minutos = (
-                        datetime.combine(datetime.now().date(), time_info[1]) -
-                        datetime.combine(datetime.now().date(), time_info[0])
-                    ).total_seconds() / 60
+                
+                # Separar las ramas condicionales del for según si es día festivo o no
+                if not is_holidays:
+                    print("No es día festivo")
+                    for time_info in [(start_time, finish_time)]:
+                        diferencia_minutos = (
+                            datetime.combine(datetime.now().date(), time_info[1]) - 
+                            datetime.combine(datetime.now().date(), time_info[0])
+                        ).total_seconds() / 60
+                        timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
+                        print(timeseccion)
+                        print(diferencia_minutos, "diferencia_minutos")
 
-                    timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
-                    print(timeseccion)
+                        # Verificar que timeseccion sea un valor numérico y evitar la división por cero
+                        if isinstance(timeseccion, (int, float)) and timeseccion != 0:
+                            print(diferencia_minutos % timeseccion)
+                            if diferencia_minutos % timeseccion != 0:
+                                print("diferente de cero")
+                                return False
+                
+                else:
+                    print("Es día festivo")
+                    for time_info in [(start_time_holi, finish_time_holi)]:
+                        diferencia_minutos = (
+                            datetime.combine(datetime.now().date(), time_info[1]) - 
+                            datetime.combine(datetime.now().date(), time_info[0])
+                        ).total_seconds() / 60
+                        timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
+                        print(timeseccion)
+                        print(diferencia_minutos, "diferencia_minutos")
 
-                    print(diferencia_minutos, "diferencia_minutos")
+                        # Verificar que timeseccion sea un valor numérico y evitar la división por cero
+                        if isinstance(timeseccion, (int, float)) and timeseccion != 0:
+                            print(diferencia_minutos % timeseccion)
+                            if diferencia_minutos % timeseccion != 0:
+                                print("diferente de cero")
+                                return False
 
-                    # Verificar que timeseccion sea un valor numérico y evitar la división por cero
-                    if isinstance(timeseccion, (int, float)) and timeseccion != 0:
-                        print(diferencia_minutos % timeseccion)
-                        if diferencia_minutos % timeseccion != 0:
-                            print("diferente de cero")
-                            return False
-                        
-               
-                print(is_holidays)
                 print("entro..................................................................................................")
                 horarios_dict = {'mon_sa': self.generar_horario_diario(
                     start_time, finish_time, timeseccion, timebreak, break_start_time
-                    )}
+                )}
 
-                # Excluir el tiempo de break del diccionario
-                """
-                break_time = datetime.combine(datetime.date.today(), break_start_time).strftime('%H:%M:%S')
-                if break_time in horarios_dict['mon_sa']:
-                horarios_dict['mon_sa'].remove(break_time)
-                """
                 if is_holidays:
-                    # Generar horario para días festivos si trabajar_holi es True
+                    print('holidays issss-------------------------:::', is_holidays)
                     horarios_dict['Holidays'] = self.generar_horario_diario(
                         start_time_holi, finish_time_holi, timeseccion, timebreak, break_start_time_holi
                     )
                 return horarios_dict
-                 
-                
+
                 
     
         except ValueError:
@@ -282,6 +303,7 @@ class DateDestroyAPIView(DestroyAPIView):
     def delete(self, request, pk=None):
         token = request.auth
         user = token.user
+        
 
         if user.is_professional and user.is_active:
             # Obtener el primer objeto
@@ -291,13 +313,21 @@ class DateDestroyAPIView(DestroyAPIView):
             dateu_timetable = TimetableSerializer.Meta.model.objects.filter(foreinguser=user.id, state=True).first()
             
             # Verificar si se encontró alguno de los objetos
-            if dateu_date:
+            if dateu_date and dateu_timetable:
+                now = datetime.now()
+                day_now=now.date()
+                time_now=now.time().replace(microsecond=0)
+                print(time_now)
+                #Elimina todas las citas pendientes hasta el momento 
+                dates_agendas_count,_= ListAgenda.objects.filter(
+                    Q(day__gt=day_now) |  # Fechas mayores a hoy
+                    Q(day=day_now, date_finish__gt=time_now),
+                    user_pro=user.id,
+                    state=True).delete()
                 dateu_date.state = False
-                dateu_date.save()
-
-            if dateu_timetable:
                 dateu_timetable.state = False
-                dateu_timetable.save()
+                dateu_date.save()
+                dateu_timetable.save() 
 
             # Verificar si al menos uno de los objetos fue encontrado y actualizado
             if dateu_date and dateu_timetable:

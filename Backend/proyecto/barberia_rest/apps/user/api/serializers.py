@@ -20,6 +20,12 @@ class UserListSerializer(serializers.ModelSerializer):
         }
 
 
+class UserLisProSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username','phonenumber','city','name','lastname']
+
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

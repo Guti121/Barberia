@@ -82,7 +82,7 @@ class User(AbstractBaseUser,PermissionsMixin):
         return(self.phonenumber)
 
     def __str__(self):
-        return f'{self.name} {self.lastname}'
+        return f'{self.pk} {self.name} {self.lastname}'
     
 ##---------------------------------------------------------------------------------------------------------------------
     

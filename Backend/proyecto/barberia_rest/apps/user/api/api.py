@@ -11,14 +11,14 @@ from apps.user.api.serializers import UserSerializer,UserListSerializer
 @api_view(['GET','POST'])
 def user_APIView(request):
 
-    #List
+    #List users 
     if request.method=='GET':
         users= User.objects.all().values('id','phonenumber','username','name','lastname','country','city','password')
         users_serializer = UserListSerializer(users,many=True)
 
         return Response(users_serializer.data,status= status.HTTP_200_OK)
     
-    #Create
+    #Create user
     elif request.method == 'POST':
         users_serializer=UserSerializer(data= request.data)
 
@@ -32,17 +32,19 @@ def user_APIView(request):
 
 @api_view(['GET','PUT','DELETE'])
 
+
 def user_detail_api_view(request,pk=None):
     
     user=User.objects.filter(id=pk).first()
 
     if user:
 
-        #reatrieve
+        #reatrieve user for pk
         if request.method=='GET':
           users_serializer = UserSerializer(user)
           return Response(users_serializer.data,status= status.HTTP_200_OK)
         
+        #update user
         elif request.method=='PUT':
             users_serializer= UserSerializer(user,data = request.data)
             if users_serializer.is_valid():

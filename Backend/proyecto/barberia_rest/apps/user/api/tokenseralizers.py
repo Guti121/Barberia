@@ -24,13 +24,14 @@ class CustomAuthTokenSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs):
+        print ('entre a validate')
         phonenumber = attrs.get('phonenumber')
         password = attrs.get('password')
-
+        print(phonenumber,password)
         if phonenumber and password:
             user = authenticate(request=self.context.get('request'),
                                 phonenumber=phonenumber, password=password)
-
+            print('user:', user)
             # The authenticate call simply returns None for is_active=False
             # users. (Assuming the default ModelBackend authentication
             # backend.)

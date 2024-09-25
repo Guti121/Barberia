@@ -16,6 +16,7 @@ class DateUserSerializer(serializers.ModelSerializer):
             'timebreak': instance.timebreak,
             'timeseccion': instance.timeseccion,
             'breakstart': instance.breakstart,
+            'is holidays':instance.is_holidays
         }   
 
         is_holidays = self.context.get('is_holidays', False)

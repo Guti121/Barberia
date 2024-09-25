@@ -17,7 +17,6 @@ class Authentication(object):
             try:
                 token= token[1].decode()
                 
-                print(token)
             except:
                 return None
             
