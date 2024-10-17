@@ -1,6 +1,8 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
-import { agendaCheckIcon, magnifyingIcon, myDateIcon, profileIcon } from '../../icons';
+import { agendaCheckIcon, magnifyingIcon, myDateIcon, plusIcon, profileIcon } from '../../icons';
+import { Button, Pressable } from 'react-native';
+import { useRouter } from 'expo-router';
 
 export default function TabLayout() {
   return (
@@ -16,8 +18,19 @@ export default function TabLayout() {
       <Tabs.Screen
         name='myScheduls'
         options={{
-          title:'MyScheduls',
-          tabBarIcon:({color})=>agendaCheckIcon(color)
+          title: 'MyScheduls',
+          tabBarIcon: ({ color }) => agendaCheckIcon(color),
+          headerRight: () => {const router = useRouter(); // Llama al hook de router dentro del componente
+            const onPress = () =>{
+              router.push('/mySchedulsPending')
+            }
+            return ( 
+            <Pressable onPress={()=>onPress()}>
+              {plusIcon()}
+            </Pressable>
+          );
+        },
+            
         }}
       />
       <Tabs.Screen

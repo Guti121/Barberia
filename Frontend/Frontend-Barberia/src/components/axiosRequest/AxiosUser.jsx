@@ -4,7 +4,7 @@ import { deleteItem, getValueFor, save } from "./TokenUse";
 import { Alert } from "react-native";
 
 
-const Baseurl='http://192.168.1.8:8000/';
+const Baseurl='http://192.168.1.1:8000/';
 
 //funcion para listar usuarios pro filtrandolos 
 export async function handleListUserPro(value) {

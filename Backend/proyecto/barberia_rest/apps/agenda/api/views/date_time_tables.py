@@ -6,6 +6,9 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.http import JsonResponse
 from apps.agenda.models import ListAgenda
 from django.db.models import Q
+from rest_framework.exceptions import ValidationError
+
+
 #import proyecto authenticate
 from apps.user.authentication_mixins import Authentication
 from rest_framework.authentication import TokenAuthentication
@@ -75,21 +78,39 @@ class DateCreateAPIView(Authentication,CreateAPIView):
         
         if user.is_professional and user.is_active:
             try:
-                is_created = DateUser.objects.get(foreinguser=user.id,state=True)
-                
+                is_created_date_user = DateUser.objects.get(foreinguser=user.id,state=True)
             except ObjectDoesNotExist:
                 # Manejar la situación en la que el objeto no existe
-                is_created = None
+                is_created_date_user = None
+            
+            try:
+                is_created_times_table= Timetable.objects.get(foreinguser=user.id,state=True)
+            except ObjectDoesNotExist:
+                is_created_times_table =None
 
-            if is_created:
+
+            if is_created_date_user or is_created_times_table:
                 return Response({'error': 'Tu formulario ya ha sido diligenciado, debes eliminar el formulario si deseas actualizarlo.'}, status=status.HTTP_403_FORBIDDEN)
             
             else:
+
                 startwork = datetime.strptime(request.data.get('startwork'), '%H:%M:%S').time()
                 finishwork = datetime.strptime(request.data.get('finishwork'), '%H:%M:%S').time()
                 timeseccion = datetime.strptime(request.data.get('timeseccion'), '%H:%M:%S').time()
                 timebreak = datetime.strptime(request.data.get('timebreak'), '%H:%M:%S').time()
                 breakstart = datetime.strptime(request.data.get('breakstart'), '%H:%M:%S').time()
+
+                start_datetime = datetime.combine(datetime(1900, 1, 1), startwork)
+                finish_datetime = datetime.combine(datetime(1900, 1, 1), finishwork)
+
+                # Calcular la duración de trabajo
+                work_duration = finish_datetime - start_datetime
+
+                self.input_data_validation(work_duration,startwork,finishwork,timeseccion,breakstart,timebreak)
+                # Asegurarse de que la duración sea de al menos 5 horas
+                
+                # Si pasa todas las validaciones, continuar con el proceso
+
                 is_holidays = request.data.get('is_holidays', 'false').lower() == 'true'# Convertir a booleano
                 print("Holidays is :----------",is_holidays)
                 # Para los campos de tiempo relacionados con las vacaciones
@@ -99,6 +120,7 @@ class DateCreateAPIView(Authentication,CreateAPIView):
                     startwork_holi = request.data.get('startwork_holi')
                     finishwork_holi = request.data.get('finishwork_holi')
                     breakstart_holi = request.data.get('breakstart_holi')
+                    
 
                     # Verificar si faltan datos para el día festivo
                     if not all([startwork_holi, finishwork_holi, breakstart_holi]):
@@ -111,7 +133,13 @@ class DateCreateAPIView(Authentication,CreateAPIView):
                     startwork_holi = datetime.strptime(startwork_holi, '%H:%M:%S').time()
                     finishwork_holi = datetime.strptime(finishwork_holi, '%H:%M:%S').time()
                     breakstart_holi = datetime.strptime(breakstart_holi, '%H:%M:%S').time()
-                    # Llamar a la función con is_holidays=True
+
+                    start_datetime = datetime.combine(datetime(1900, 1, 1), startwork_holi)
+                    finish_datetime = datetime.combine(datetime(1900, 1, 1), finishwork_holi)
+                    work_duration_holi = finish_datetime - start_datetime
+
+                    self.input_data_validation(work_duration_holi,startwork_holi,finishwork_holi,timeseccion,breakstart_holi,timebreak)
+                        # Llamar a la función con is_holidays=True
                     schedule_result = self.generate_schedule(startwork, finishwork, timeseccion, timebreak, breakstart, 
                                                             startwork_holi, finishwork_holi, breakstart_holi, is_holidays=True)
                     
@@ -143,11 +171,29 @@ class DateCreateAPIView(Authentication,CreateAPIView):
                 
                 else:
                     return Response({'error': 'El horario no es divisible uniformemente.'}, status=status.HTTP_400_BAD_REQUEST)
-            
+        
         else:
             return Response({'error': 'Usuario no autorizado.'}, status=status.HTTP_403_FORBIDDEN)
     
+    def input_data_validation(self,work_duration,startwork,finishwork,timeseccion,breakstart,timebreak):
+        if work_duration < timedelta(hours=5):
+            raise ValidationError({'error': 'La jornada laboral debe ser de al menos 5 horas'})
 
+        if startwork >= finishwork:
+            raise ValidationError({'error': 'La hora de inicio debe ser menor a la hora de finalización'})
+
+        if breakstart <= startwork or breakstart >= finishwork:
+            raise ValidationError({'error': 'La hora de descanso debe estar dentro de las horas laborales'})
+
+        if timeseccion < time(0, 20, 0) or timeseccion > time(2, 0, 0):
+            raise ValidationError({'error': 'El tiempo de sesión debe ser mínimo de 20 minutos y máximo de 2 horas'})
+
+        if timebreak < time(0, 0, 0) or timebreak > time(3, 0, 0):
+            raise ValidationError({'error': 'El tiempo de descanso debe ser mínimo de 0 y máximo de 3 horas'})
+
+        print('paso input validations')
+        
+    
     def generate_schedule(self, startwork, finishwork, timeseccion, timebreak, breakstart, 
                       startwork_holi, finishwork_holi, breakstart_holi, is_holidays):
         try:
@@ -155,7 +201,7 @@ class DateCreateAPIView(Authentication,CreateAPIView):
             start_time = startwork
             finish_time = finishwork
             break_start_time = breakstart
-            print(start_time, finish_time, break_start_time)   
+            print(start_time, finish_time, break_start_time,timebreak)   
 
             if is_holidays:
                 print(is_holidays, "holidays")
@@ -168,8 +214,9 @@ class DateCreateAPIView(Authentication,CreateAPIView):
             
             # Validar que ambos horarios sean divisibles uniformemente por timeseccion
             print(timeseccion, "Timeseccion")
+            
             # Convertir la cadena de tiempo a un objeto timedelta
-            timeseccion_timedelta = datetime.combine(datetime.now().date(), timeseccion) - datetime(1900, 1, 1)
+            timeseccion_timedelta  = datetime.combine(datetime(1900, 1, 1), timeseccion) - datetime(1900, 1, 1)
 
             # Calcular la duración total en minutos 
             if isinstance(timeseccion_timedelta.total_seconds(), (int, float)) and timeseccion_timedelta.total_seconds() != 0:
@@ -178,40 +225,120 @@ class DateCreateAPIView(Authentication,CreateAPIView):
                 # Separar las ramas condicionales del for según si es día festivo o no
                 if not is_holidays:
                     print("No es día festivo")
-                    for time_info in [(start_time, finish_time)]:
-                        diferencia_minutos = (
-                            datetime.combine(datetime.now().date(), time_info[1]) - 
-                            datetime.combine(datetime.now().date(), time_info[0])
-                        ).total_seconds() / 60
-                        timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
-                        print(timeseccion)
-                        print(diferencia_minutos, "diferencia_minutos")
+                    
+                    # Calcular la diferencia en minutos
+                    #Antes de iniciar todo necesito restar el tiempo del break a la duracion total de horas laborales
+                        #para finalmente mirar si es divisible de manera uniforme 
+                    break_timedelta = datetime.combine(datetime(1900, 1, 1).date(), timebreak) - datetime(1900, 1, 1)
 
-                        # Verificar que timeseccion sea un valor numérico y evitar la división por cero
-                        if isinstance(timeseccion, (int, float)) and timeseccion != 0:
-                            print(diferencia_minutos % timeseccion)
-                            if diferencia_minutos % timeseccion != 0:
-                                print("diferente de cero")
-                                return False
-                
+                    diferencia_minutos = (
+                        (datetime.combine(datetime.now().date(), finish_time) - 
+                        datetime.combine(datetime.now().date(), start_time))-
+                        break_timedelta
+                    ).total_seconds() / 60
+                    
+                    print('Diferencia de tiempo',diferencia_minutos)
+                    timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
+                    print(timeseccion)
+                    print(diferencia_minutos, "diferencia_minutos")
+                    
+                    #Sacamos los tiempos que hay antes y despues del break para verificar que se puedan distribuir las secciones uniformemente
+                    first_part_work=(datetime.combine(datetime(1900, 1, 1).date(), break_start_time) - datetime.combine(datetime(1900, 1, 1).date(), start_time)).total_seconds() / 60
+
+                    timebreak_minutes = timebreak.hour * 60 + timebreak.minute  # Convertir a minutos
+                    timebreak_timedelta = timedelta(minutes=timebreak_minutes) 
+                    break_end_time = datetime.combine(datetime(1900, 1, 1).date(), breakstart) + timebreak_timedelta
+                    second_part_work= (datetime.combine(datetime(1900, 1, 1).date(), finish_time )- break_end_time).total_seconds() / 60
+                    print("holi",first_part_work)
+                    print('Suma de start break y time break',(datetime.combine(datetime(1900, 1, 1).date(), break_start_time) + timebreak_timedelta),'diferecia',second_part_work)
+                    print('Segunda parte',second_part_work)
+                    
+                    # Verificar que timeseccion sea un valor numérico y evitar la división por cero
+                    if isinstance(timeseccion, (int, float)) and timeseccion != 0:
+                        print(diferencia_minutos % timeseccion)
+                        if (diferencia_minutos % timeseccion != 0) or (first_part_work % timeseccion != 0) or (second_part_work % timeseccion != 0) or (second_part_work == 0.0) or (first_part_work == 0.0):
+                            # Hacer algo si ninguno de los valores es divisible por timeseccion
+                            print("Ninguno de los tiempos es divisible por el tiempo de sección")    
+                            print("diferente de cero")
+                            return False
+                        
                 else:
                     print("Es día festivo")
-                    for time_info in [(start_time_holi, finish_time_holi)]:
-                        diferencia_minutos = (
-                            datetime.combine(datetime.now().date(), time_info[1]) - 
-                            datetime.combine(datetime.now().date(), time_info[0])
-                        ).total_seconds() / 60
-                        timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
-                        print(timeseccion)
-                        print(diferencia_minutos, "diferencia_minutos")
+                    # Calcular la diferencia en minutos
+                    #Antes de iniciar todo necesito restar el tiempo del break a la duracion total de horas laborales
+                        #para finalmente mirar si es divisible de manera uniforme 
+                    break_timedelta = datetime.combine(datetime(1900, 1, 1).date(), timebreak) - datetime(1900, 1, 1)
 
+                    diferencia_minutos = (
+                        (datetime.combine(datetime.now().date(), finish_time_holi) - 
+                        datetime.combine(datetime.now().date(), start_time_holi))-
+                        break_timedelta
+                    ).total_seconds() / 60
+
+                    print('Diferencia de tiempo',diferencia_minutos)
+                    timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
+                    print(timeseccion)
+                    print(diferencia_minutos, "diferencia_minutos")
+                    
+                    #Sacamos los tiempos que hay antes y despues del break para verificar que se puedan distribuir las secciones uniformemente
+                    first_part_work=(datetime.combine(datetime(1900, 1, 1).date(), breakstart_holi) - datetime.combine(datetime(1900, 1, 1).date(), start_time_holi)).total_seconds() / 60
+                    timebreak_minutes = timebreak.hour * 60 + timebreak.minute  # Convertir a minutos
+                    timebreak_timedelta = timedelta(minutes=timebreak_minutes) 
+                    break_end_time = datetime.combine(datetime(1900, 1, 1).date(), breakstart_holi) + timebreak_timedelta
+                    second_part_work= (datetime.combine(datetime(1900, 1, 1).date(), finish_time_holi ) - break_end_time ).total_seconds() / 60
+                    
+                    print("holi",first_part_work)
+                    print('Suma de start break y time break',(datetime.combine(datetime(1900, 1, 1).date(), breakstart_holi) + timebreak_timedelta),'diferecia',second_part_work)
+                    print('Segunda parte',second_part_work)
+                    
+                        
                         # Verificar que timeseccion sea un valor numérico y evitar la división por cero
-                        if isinstance(timeseccion, (int, float)) and timeseccion != 0:
-                            print(diferencia_minutos % timeseccion)
-                            if diferencia_minutos % timeseccion != 0:
-                                print("diferente de cero")
-                                return False
+                    if isinstance(timeseccion, (int, float)) and timeseccion != 0:
+                        print(diferencia_minutos % timeseccion)
+                        if (diferencia_minutos % timeseccion != 0) or (first_part_work % timeseccion != 0) or (second_part_work % timeseccion != 0) or (second_part_work == 0.0)or (first_part_work == 0.0):
+                            # Hacer algo si ninguno de los valores es divisible por timeseccion
+                            print("Ninguno de los tiempos es divisible por el tiempo de sección")    
+                            print("diferente de cero")
+                            return False
+                        
 
+
+                    # Calcular la diferencia en minutos
+                    #Antes de iniciar todo necesito restar el tiempo del break a la duracion total de horas laborales
+                        #para finalmente mirar si es divisible de manera uniforme 
+                    break_timedelta = datetime.combine(datetime(1900, 1, 1).date(), timebreak) - datetime(1900, 1, 1)
+
+                    diferencia_minutos = (
+                        (datetime.combine(datetime.now().date(), finish_time) - 
+                        datetime.combine(datetime.now().date(), start_time))-
+                        break_timedelta
+                    ).total_seconds() / 60
+                    
+                    print('Diferencia de tiempo',diferencia_minutos)
+                    timeseccion = int(timeseccion_timedelta.seconds // 60)  # Convertir la duración a minutos
+                    print(timeseccion)
+                    print(diferencia_minutos, "diferencia_minutos")
+                    
+                    #Sacamos los tiempos que hay antes y despues del break para verificar que se puedan distribuir las secciones uniformemente
+                    first_part_work=(datetime.combine(datetime(1900, 1, 1).date(), break_start_time) - datetime.combine(datetime(1900, 1, 1).date(), start_time)).total_seconds() / 60
+
+                    timebreak_minutes = timebreak.hour * 60 + timebreak.minute  # Convertir a minutos
+                    timebreak_timedelta = timedelta(minutes=timebreak_minutes) 
+                    break_end_time = datetime.combine(datetime(1900, 1, 1).date(), breakstart) + timebreak_timedelta
+                    second_part_work= (datetime.combine(datetime(1900, 1, 1).date(), finish_time )- break_end_time).total_seconds() / 60
+                    print("holi",first_part_work)
+                    print('Suma de start break y time break',(datetime.combine(datetime(1900, 1, 1).date(), break_start_time) + timebreak_timedelta),'diferecia',second_part_work)
+                    print('Segunda parte',second_part_work)
+                    
+                    # Verificar que timeseccion sea un valor numérico y evitar la división por cero
+                    if isinstance(timeseccion, (int, float)) and timeseccion != 0:
+                        print(diferencia_minutos % timeseccion)
+                        if (diferencia_minutos % timeseccion != 0) or (first_part_work % timeseccion != 0) or (second_part_work % timeseccion != 0) or (second_part_work == 0.0) or (first_part_work == 0.0):
+                            # Hacer algo si ninguno de los valores es divisible por timeseccion
+                            print("Ninguno de los tiempos es divisible por el tiempo de sección")    
+                            print("diferente de cero")
+                            return False
+                            
                 print("entro..................................................................................................")
                 horarios_dict = {'mon_sa': self.generar_horario_diario(
                     start_time, finish_time, timeseccion, timebreak, break_start_time
@@ -240,6 +367,8 @@ class DateCreateAPIView(Authentication,CreateAPIView):
         print(current_time)
         print(horario_diario)
         print("Estamos en generar horario")
+
+        
         
         # Supongamos que timebreak es una cadena en formato "HH:MM:SS"
         
@@ -275,6 +404,7 @@ class DateCreateAPIView(Authentication,CreateAPIView):
         return horario_diario
     
     def save_horario_diario(self,horarios_dict):
+        
         data = []
         data = {'foreinguser': self.user.id, 'datos_json': horarios_dict}
 
@@ -292,7 +422,7 @@ class DateCreateAPIView(Authentication,CreateAPIView):
 
 
 ##Podemos eliminar un DateUser  
-class DateDestroyAPIView(DestroyAPIView):
+class DateDestroyAPIView(Authentication,DestroyAPIView):
     serializer_class1=DateUserSerializer
     serializer_class2=TimetableSerializer
     authentication_classes = [TokenAuthentication]  # Agrega TokenAuthentication
@@ -303,17 +433,18 @@ class DateDestroyAPIView(DestroyAPIView):
     def delete(self, request, pk=None):
         token = request.auth
         user = token.user
+        print(user,token)
         
 
         if user.is_professional and user.is_active:
             # Obtener el primer objeto
-            dateu_date = DateUserSerializer.Meta.model.objects.filter(id=pk, foreinguser=user.id, state=True).first()
+            dateu_date = DateUserSerializer.Meta.model.objects.filter(foreinguser=user.id, state=True).first()
 
             # Obtener el segundo objeto
             dateu_timetable = TimetableSerializer.Meta.model.objects.filter(foreinguser=user.id, state=True).first()
             
             # Verificar si se encontró alguno de los objetos
-            if dateu_date and dateu_timetable:
+            if dateu_date or dateu_timetable:
                 now = datetime.now()
                 day_now=now.date()
                 time_now=now.time().replace(microsecond=0)
@@ -323,16 +454,27 @@ class DateDestroyAPIView(DestroyAPIView):
                     Q(day__gt=day_now) |  # Fechas mayores a hoy
                     Q(day=day_now, date_finish__gt=time_now),
                     user_pro=user.id,
-                    state=True).delete()
-                dateu_date.state = False
-                dateu_timetable.state = False
-                dateu_date.save()
-                dateu_timetable.save() 
+                    ).delete()
+                
+                if dateu_date and dateu_timetable:
+                    dateu_date.state = False
+                    dateu_date.save()
+                    dateu_timetable.state = False
+                    dateu_timetable.save() 
+
+                elif dateu_timetable:
+                    dateu_timetable.state = False
+                    dateu_timetable.save() 
+
+                elif dateu_date:
+                    dateu_date.state = False
+                    dateu_date.save()
 
             # Verificar si al menos uno de los objetos fue encontrado y actualizado
             if dateu_date and dateu_timetable:
                 return Response({'message': 'Formularios eliminados correctamente'}, status=status.HTTP_200_OK)
             else:
+                print('entro')
                 return Response({'error':'No existe un formulario con estos datos!'}, status=status.HTTP_400_BAD_REQUEST)
         else:
             return Response({'error': 'Usuario no autorizado.'}, status=status.HTTP_403_FORBIDDEN)

@@ -46,9 +46,13 @@ class ListAgenda (BaseModel):
     date_finish=models.TimeField(null=False,blank=False,verbose_name="Finish shift")
     user_pro = models.ForeignKey(User, on_delete=models.CASCADE, null=False, blank=False, verbose_name="Profesional", related_name="professional_listagenda_set")
     user_clie = models.ForeignKey(User, on_delete=models.CASCADE, null=False, blank=False, verbose_name="Cliente", related_name="client_listagenda_set")
-    
     historical=HistoricalRecords()
 
+    def save(self, *args, **kwargs):
+        if self._state.adding:  # Solo al crear una nueva instancia
+            self.state = False  # Sobrescribe el valor predeterminado
+        super().save(*args, **kwargs)
+        
     @property
     def _history_user(self):
         return self.changed_by

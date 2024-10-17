@@ -5,14 +5,14 @@ import { Alert } from "react-native";
 
 //url base 
 
-const Baseurl='http://192.168.1.8:8000/agenda/';
+const Baseurl='http://192.168.1.1:8000/agenda/';
 
 //refresh token 
 export async function refreshGetToken(){
     
     await expiredTimeToken()
     const result = await getValueFor()
-    console.log(result)
+    console.log('refresGetToken',result)
 
     if(!result){
         throw new Error("No se encontro Token")
@@ -23,6 +23,7 @@ export async function refreshGetToken(){
 
 //funcion para listar el horario disponible en el calendario 
 export async function handleListCalendar(selectedDate,idUserPro) {
+    
     const url= `${Baseurl}listavailable/`
     const data = {
         fecha:selectedDate,
@@ -40,20 +41,37 @@ export async function handleCreateAgenda(selectedDate,selectedTime,idUserPro){
             date_start:selectedTime,
             user_pro : idUserPro,
         };
-    const token = await refreshGetToken(url,data)
+    const token = await refreshGetToken()
     const headers={'Authorization':`token ${token}`}
     return await awaitFunction(url,data,headers);
         
 }
-export async function handleListAgendaPro(selectedDay){
+export async function handleListAgendaPro(selectedDay,type){
     date= selectedDay.toISOString().split("T")[0]
     const url= `${Baseurl}user-agendas/`
-    const data={date:date}
+    const data={date:date,
+        type:type.type
+    }
 
-    const token = await refreshGetToken(url,data)
+    const token = await refreshGetToken()
     const headers={'Authorization':`token ${token}`}
     return await awaitFunction(url,data,headers);
     
+}
+export async function handleConfirmScheduls (itemId){
+    console.log(itemId)
+    const url = `${Baseurl}handleConfirmScheduls/`
+    const data ={itemID:itemId}
+    try{
+        const token = await refreshGetToken()
+        const headers={'Authorization':`token ${token}`}
+        const response = await axios.patch(url,data,{headers, withCredentials:true})
+        console.log('resonse : ',response.data)
+        return response.data
+    }catch(error){
+        console.log('error:',error)
+        Alert.alert('Error Desconocido')
+    }
 }
 
 export async function handleListAgendaClie(){
@@ -63,7 +81,7 @@ export async function handleListAgendaClie(){
     const data={
         date:date
     }
-    const token = await refreshGetToken(url,data)
+    const token = await refreshGetToken()
     const headers={'Authorization':`token ${token}`}
     return await awaitFunction(url,data,headers);  
 }

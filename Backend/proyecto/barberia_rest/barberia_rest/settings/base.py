@@ -121,10 +121,8 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:8081',
-    'http://192.168.1.8:8081',
-    'exp://192.168.1.8:8081',
-    'http://192.168.1.3:8081',
-    'exp://192.168.1.3:8081',
+    'exp://192.168.1.1:8081',
+    'http://192.168.1.1:8081'
 ]
 
 

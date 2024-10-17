@@ -1,6 +1,6 @@
-import { Alert, Button, View } from "react-native"
+import { Alert, Button, Pressable, View,Text } from "react-native"
 import { handleLogout } from "../../components/axiosRequest/AxiosUser"
-import { useRouter } from "expo-router"
+import { Link, useRouter } from "expo-router"
 import ConfigUser from "../../components/user/configUser";
 
 export default function Profile(){
@@ -10,14 +10,18 @@ export default function Profile(){
             await handleLogout()
             router.replace('/login')
         }catch{
-            Alert.alert('Erro al Cerrar sesion')
+            Alert.alert('Error al Cerrar sesion')
         }
     }
 
+
     return(
         <View>
-         <ConfigUser/>
-         <Button title="Logout" onPress={()=> logoutRedirct()}/>
+            <Link href='/timesTable' >
+                <Text>Horario</Text>
+            </Link>
+            
+            <Button title="Logout" onPress={()=> logoutRedirct()}/>
         </View>
     )
 }
